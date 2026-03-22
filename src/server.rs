@@ -61,6 +61,7 @@
 
 use may::coroutine;
 use may::sync::mpsc;
+use std::fmt::Display;
 
 /// Reason given when a server terminates.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,8 +164,10 @@ pub trait Server {
         let _ = (reason, state);
     }
 
-    fn handle_debug(state: Self::State) {
-        println!("{} at {}", state, std::time::Instant::now());
+    fn handle_debug(state: Self::State) -> String
+    where <Self as Server>::State: std::fmt::Display 
+    {
+        format!("{} at {:#?}", state, std::time::Instant::now())
     }
 }
 
@@ -412,7 +415,7 @@ mod tests {
                 }
             }
         }
-    }
+    }    
 
     #[test]
     fn reply_later_with_callref() {
@@ -438,9 +441,9 @@ mod tests {
         let result = handle.call(CallMsg::Get);
         assert_eq!(result, Err(CallError::ServerDown));
     }
+    
 }
-
-
-pub fn debug<T:Server>(obj:T) {
-    println!("{}", obj.handle_debug());
+/// Prints info about server
+pub fn debug<T:Server<State=T> + Display>(obj:T) {
+    println!("{}", <T as Server>::handle_debug(obj));
 }   
