@@ -162,6 +162,10 @@ pub trait Server {
     fn terminate(reason: TerminateReason, state: Self::State) {
         let _ = (reason, state);
     }
+
+    fn handle_debug(state: Self::State) {
+        println!("{} at {}", state, std::time::Instant::now());
+    }
 }
 
 enum ServerMsg<S: Server> {
@@ -435,3 +439,8 @@ mod tests {
         assert_eq!(result, Err(CallError::ServerDown));
     }
 }
+
+
+pub fn debug<T:Server>(obj:T) {
+    println!("{}", obj.handle_debug());
+}   

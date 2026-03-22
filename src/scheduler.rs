@@ -24,15 +24,7 @@
 use may::coroutine;
 use may::sync::mpsc;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-
-pub struct ScheduledResult<T> {
-    /// Elapsed time in milliseconds.
-    pub elapsed: u32,
-    /// Result produced by the scheduled function.
-    pub result: T,
-}
+use std::sync::Arc;
 
 enum SchedulerMsg<T, R> {
     Ready(usize),
@@ -42,47 +34,6 @@ enum SchedulerMsg<T, R> {
 enum WorkerMsg<T> {
     Work(T),
     Shutdown,
-}
-
-/// Runs a single function on a pool of green-thread workers.
-///
-/// The function is executed exactly once; extra workers simply wait.
-pub fn schedule<F, R>(np: u16, func: F) -> ScheduledResult<R>
-where
-    F: FnOnce() -> R + Send + 'static,
-    R: Send + 'static,
-{
-    let start_time = Instant::now();
-
-    let workers = if np == 0 { 1 } else { np as usize };
-    may::config().set_workers(workers);
-
-    let job = Arc::new(Mutex::new(Some(func)));
-    let (tx, rx) = mpsc::channel::<R>();
-    for _ in 0..workers {
-        let job = Arc::clone(&job);
-        let tx = tx.clone();
-        unsafe {
-            coroutine::spawn(move || {
-                let maybe_job = { job.lock().expect("scheduler lock poisoned").take() };
-                if let Some(job) = maybe_job {
-                    let _ = tx.send(job());
-                }
-            });
-        }
-    }
-
-    drop(tx);
-    let result = rx
-        .recv()
-        .expect("scheduler ran without producing a result");
-
-    let elapsed = start_time.elapsed().as_millis() as u32;
-
-    ScheduledResult {
-        elapsed,
-        result,
-    }
 }
 
 /// Runs a pool of green-thread workers over a queue of inputs.
