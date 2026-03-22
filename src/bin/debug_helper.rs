@@ -11,7 +11,7 @@ impl Server for Echo {
     type Reply = ();
 
     fn init() -> Self::State {
-        Echo(0)
+        Echo(7)
     }
 
     fn handle_call(
@@ -24,5 +24,6 @@ impl Server for Echo {
 }
 
 fn main() {
-    server::debug::<Echo>(Echo(7));
+    let handle = server::start_link::<Echo>();
+    server::debug(&handle).unwrap();
 }

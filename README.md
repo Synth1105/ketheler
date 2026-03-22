@@ -71,25 +71,36 @@ let value = handle.call(Call::Get).unwrap();
 assert_eq!(value, 1);
 ```
 
-## Debugging State
+## Debugging And Status (OTP-style)
 
-The `debug` helper prints the output of `Server::handle_debug` for a state value.
-By default, `handle_debug` uses the `Debug` representation of the state.
+`ServerHandle::status()` requests OTP-style status data from a running server.
+By default, `handle_status` uses the `Debug` representation of the state.
 
 ```rust
 use ketheler::server;
 
-// `Echo` implements `Server` with `State = Echo`.
-server::debug::<Echo>(Echo(7));
+let handle = server::start_link::<Echo>();
+let status = handle.status().unwrap();
+println!("{}", status.state);
 ```
 
-If you want to avoid turbofish, pass a server value to `debug_with`:
+The `debug` helper prints the status state string:
 
 ```rust
 use ketheler::server;
 
-// `Echo` is a unit-like server type.
-server::debug_with(Echo, Echo(7));
+let handle = server::start_link::<Echo>();
+server::debug(&handle).unwrap();
+```
+
+If you want to format a state value directly (not a running server), use
+`debug_state` or `debug_state_with`:
+
+```rust
+use ketheler::server;
+
+server::debug_state::<Echo>(Echo(7));
+server::debug_state_with(Echo, Echo(7));
 ```
 
 ## Scheduler

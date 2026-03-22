@@ -164,11 +164,20 @@ pub trait Server {
         let _ = (reason, state);
     }
 
-    fn handle_debug(state: Self::State) -> String
+    /// Handle a status request (OTP-style).
+    fn handle_status(state: &Self::State) -> String
     where
         <Self as Server>::State: std::fmt::Debug,
     {
         format!("{:?}", state)
+    }
+
+    /// Legacy debug hook kept for compatibility with state-by-value callers.
+    fn handle_debug(state: Self::State) -> String
+    where
+        <Self as Server>::State: std::fmt::Debug,
+    {
+        Self::handle_status(&state)
     }
 }
 
@@ -179,6 +188,9 @@ enum ServerMsg<S: Server> {
     },
     Cast(S::Cast),
     Info(S::Info),
+    Status {
+        reply: mpsc::Sender<String>,
+    },
     Stop(TerminateReason),
 }
 
@@ -194,6 +206,15 @@ pub enum CallError {
 pub enum SendError {
     /// The server has already stopped.
     ServerDown,
+}
+
+/// Snapshot of a server's status (OTP-style).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerStatus {
+    /// Fully-qualified type name of the server.
+    pub server: &'static str,
+    /// Server-provided status string.
+    pub state: String,
 }
 
 /// A handle to a running server.
@@ -232,6 +253,19 @@ impl<S: Server> ServerHandle<S> {
         self.tx
             .send(ServerMsg::Stop(reason))
             .map_err(|_| SendError::ServerDown)
+    }
+
+    /// Request OTP-style status information from the server.
+    pub fn status(&self) -> Result<ServerStatus, CallError> {
+        let (tx, rx) = mpsc::channel::<String>();
+        self.tx
+            .send(ServerMsg::Status { reply: tx })
+            .map_err(|_| CallError::ServerDown)?;
+        let state = rx.recv().map_err(|_| CallError::ServerDown)?;
+        Ok(ServerStatus {
+            server: std::any::type_name::<S>(),
+            state,
+        })
     }
 }
 
@@ -305,6 +339,10 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) {
                         break;
                     }
                 }
+            }
+            ServerMsg::Status { reply } => {
+                let status = S::handle_status(&state);
+                let _ = reply.send(status);
             }
             ServerMsg::Stop(reason) => {
                 S::terminate(reason, state);
@@ -444,20 +482,31 @@ mod tests {
     }
 
 }
-/// Prints info about a server state using the server's debug handler.
-pub fn debug<S>(state: S::State)
+
+/// Prints OTP-style status info from a running server.
+pub fn debug<S>(handle: &ServerHandle<S>) -> Result<(), CallError>
+where
+    S: Server,
+{
+    let status = handle.status()?;
+    println!("{}", status.state);
+    Ok(())
+}
+
+/// Prints info about a server state using the server's status handler.
+pub fn debug_state<S>(state: S::State)
 where
     S: Server,
     S::State: Debug,
 {
-    println!("{}", <S as Server>::handle_debug(state));
+    println!("{}", <S as Server>::handle_status(&state));
 }
 
 /// Prints info about a server state without explicit turbofish by passing a server value.
-pub fn debug_with<S>(_: S, state: S::State)
+pub fn debug_state_with<S>(_: S, state: S::State)
 where
     S: Server,
     S::State: Debug,
 {
-    println!("{}", <S as Server>::handle_debug(state));
+    println!("{}", <S as Server>::handle_status(&state));
 }
