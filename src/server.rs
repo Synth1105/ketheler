@@ -167,7 +167,7 @@ pub trait Server {
     fn handle_debug(state: Self::State) -> String
     where <Self as Server>::State: std::fmt::Display 
     {
-        format!("{} at {:#?}", state, std::time::Instant::now())
+        format!("{}", state)
     }
 }
 
@@ -441,7 +441,7 @@ mod tests {
         let result = handle.call(CallMsg::Get);
         assert_eq!(result, Err(CallError::ServerDown));
     }
-    
+
 }
 /// Prints info about server
 pub fn debug<T:Server<State=T> + Display>(obj:T) {
