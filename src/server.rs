@@ -270,7 +270,7 @@ impl<S: Server> ServerHandle<S> {
 }
 
 /// Start a linked server process.
-pub fn start_link<S: Server + 'static>() -> ServerHandle<S> {
+pub fn start_link<S: Server + 'static>() -> ServerHandle<S> where <S as Server>::State: Debug {
     let (tx, rx) = mpsc::channel::<ServerMsg<S>>();
     unsafe {
         coroutine::spawn(move || server_loop::<S>(rx));
