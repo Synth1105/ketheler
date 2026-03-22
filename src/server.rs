@@ -171,15 +171,8 @@ pub trait Server {
     {
         format!("{:?}", state)
     }
-
-    /// Legacy debug hook kept for compatibility with state-by-value callers.
-    fn handle_debug(state: Self::State) -> String
-    where
-        <Self as Server>::State: std::fmt::Debug,
-    {
-        Self::handle_status(&state)
-    }
 }
+
 
 enum ServerMsg<S: Server> {
     Call {
