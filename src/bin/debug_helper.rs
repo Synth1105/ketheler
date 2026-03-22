@@ -1,14 +1,7 @@
 use ketheler::server::{self, CallRef, CallResponse, Server};
-use std::fmt;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Echo(u32);
-
-impl fmt::Display for Echo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 impl Server for Echo {
     type State = Self;

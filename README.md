@@ -74,12 +74,22 @@ assert_eq!(value, 1);
 ## Debugging State
 
 The `debug` helper prints the output of `Server::handle_debug` for a state value.
+By default, `handle_debug` uses the `Debug` representation of the state.
 
 ```rust
 use ketheler::server;
 
 // `Echo` implements `Server` with `State = Echo`.
 server::debug::<Echo>(Echo(7));
+```
+
+If you want to avoid turbofish, pass a server value to `debug_with`:
+
+```rust
+use ketheler::server;
+
+// `Echo` is a unit-like server type.
+server::debug_with(Echo, Echo(7));
 ```
 
 ## Scheduler

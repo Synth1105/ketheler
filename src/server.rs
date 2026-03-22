@@ -61,7 +61,7 @@
 
 use may::coroutine;
 use may::sync::mpsc;
-use std::fmt::Display;
+use std::fmt::Debug;
 
 /// Reason given when a server terminates.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,9 +165,10 @@ pub trait Server {
     }
 
     fn handle_debug(state: Self::State) -> String
-    where <Self as Server>::State: std::fmt::Display 
+    where
+        <Self as Server>::State: std::fmt::Debug,
     {
-        format!("{}", state)
+        format!("{:?}", state)
     }
 }
 
@@ -447,7 +448,16 @@ mod tests {
 pub fn debug<S>(state: S::State)
 where
     S: Server,
-    S::State: Display,
+    S::State: Debug,
+{
+    println!("{}", <S as Server>::handle_debug(state));
+}
+
+/// Prints info about a server state without explicit turbofish by passing a server value.
+pub fn debug_with<S>(_: S, state: S::State)
+where
+    S: Server,
+    S::State: Debug,
 {
     println!("{}", <S as Server>::handle_debug(state));
 }
