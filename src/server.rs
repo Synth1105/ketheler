@@ -286,7 +286,7 @@ impl<S: Server> Clone for ServerHandle<S> {
     }
 }
 
-fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) {
+fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>::State: Debug  {
     let mut state = S::init();
 
     loop {
