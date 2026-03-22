@@ -31,5 +31,5 @@ impl Server for Echo {
 }
 
 fn main() {
-    server::debug(Echo(7));
+    server::debug::<Echo>(Echo(7));
 }

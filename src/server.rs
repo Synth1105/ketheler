@@ -443,7 +443,11 @@ mod tests {
     }
 
 }
-/// Prints info about server
-pub fn debug<T:Server<State=T> + Display>(obj:T) {
-    println!("{}", <T as Server>::handle_debug(obj));
-}   
+/// Prints info about a server state using the server's debug handler.
+pub fn debug<S>(state: S::State)
+where
+    S: Server,
+    S::State: Display,
+{
+    println!("{}", <S as Server>::handle_debug(state));
+}
