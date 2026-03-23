@@ -11,13 +11,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ketheler = "0.2.0"
+ketheler = "0.8.0"
 ```
 
 ## GenServer-Style API
 
 ```rust
-use ketheler::server::{self, CallResponse, CastResponse, Server};
+use ketheler::server::{self, Response, ResponseKind, Server};
 
 struct Counter;
 
@@ -45,12 +45,12 @@ impl Server for Counter {
         call: Self::Call,
         _from: server::CallRef<Self::Reply>,
         state: Self::State,
-    ) -> CallResponse<Self::Reply, Self::State> {
+    ) -> Response<Self::Reply, Self::State> {
         match call {
-            Call::Get => CallResponse::Reply(state, state),
+            Call::Get => Response::Reply(state, state, Some(ResponseKind::Call)),
             Call::Add(delta) => {
                 let next = state + delta;
-                CallResponse::Reply(next, next)
+                Response::Reply(next, next, Some(ResponseKind::Call))
             }
         }
     }
@@ -58,9 +58,9 @@ impl Server for Counter {
     fn handle_cast(
         cast: Self::Cast,
         state: Self::State,
-    ) -> CastResponse<Self::State> {
+    ) -> Response<Self::Reply, Self::State> {
         match cast {
-            Cast::Inc => CastResponse::NoReply(state + 1),
+            Cast::Inc => Response::NoReply(state + 1, Some(ResponseKind::Cast)),
         }
     }
 }

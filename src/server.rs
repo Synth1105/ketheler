@@ -5,7 +5,7 @@
 //!
 //! # Example
 //! ```no_run
-//! use ketheler::server::{self, CallResponse, CastResponse, Server};
+//! use ketheler::server::{self, Response, ResponseKind, Server};
 //!
 //! struct Counter;
 //!
@@ -33,12 +33,12 @@
 //!         call: Self::Call,
 //!         _from: server::CallRef<Self::Reply>,
 //!         state: Self::State,
-//!     ) -> CallResponse<Self::Reply, Self::State> {
+//!     ) -> Response<Self::Reply, Self::State> {
 //!         match call {
-//!             Call::Get => CallResponse::Reply(state, state),
+//!             Call::Get => Response::Reply(state, state, Some(ResponseKind::Call)),
 //!             Call::Add(delta) => {
 //!                 let next = state + delta;
-//!                 CallResponse::Reply(next, next)
+//!                 Response::Reply(next, next, Some(ResponseKind::Call))
 //!             }
 //!         }
 //!     }
@@ -46,9 +46,9 @@
 //!     fn handle_cast(
 //!         cast: Self::Cast,
 //!         state: Self::State,
-//!     ) -> CastResponse<Self::State> {
+//!     ) -> Response<Self::Reply, Self::State> {
 //!         match cast {
-//!             Cast::Inc => CastResponse::NoReply(state + 1),
+//!             Cast::Inc => Response::NoReply(state + 1, Some(ResponseKind::Cast)),
 //!         }
 //!     }
 //! }
@@ -74,24 +74,22 @@ pub enum TerminateReason {
     Error(String),
 }
 
-/// Reply options for synchronous calls.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CallResponse<R, S> {
-    /// Reply immediately and continue with a new state.
-    Reply(R, S),
-    /// Do not reply immediately; the handler is responsible for replying later.
-    NoReply(S),
-    /// Stop the server, optionally replying first.
-    Stop(TerminateReason, S, Option<R>),
+/// Message origin marker (optional).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResponseKind {
+    Call,
+    Cast,
 }
 
-/// Response options for asynchronous casts.
+/// Unified response options for calls and casts.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CastResponse<S> {
+pub enum Response<R, S> {
+    /// Reply immediately and continue with a new state.
+    Reply(R, S, Option<ResponseKind>),
     /// Continue without a reply.
-    NoReply(S),
-    /// Stop the server.
-    Stop(TerminateReason, S),
+    NoReply(S, Option<ResponseKind>),
+    /// Stop the server, optionally replying first.
+    Stop(TerminateReason, S, Option<R>, Option<ResponseKind>),
 }
 
 /// Response options for generic info messages.
@@ -145,12 +143,12 @@ pub trait Server {
         call: Self::Call,
         from: CallRef<Self::Reply>,
         state: Self::State,
-    ) -> CallResponse<Self::Reply, Self::State>;
+    ) -> Response<Self::Reply, Self::State>;
 
     /// Handle an asynchronous cast.
-    fn handle_cast(cast: Self::Cast, state: Self::State) -> CastResponse<Self::State> {
+    fn handle_cast(cast: Self::Cast, state: Self::State) -> Response<Self::Reply, Self::State> {
         let _ = cast;
-        CastResponse::NoReply(state)
+        Response::NoReply(state, Some(ResponseKind::Cast))
     }
 
     /// Handle an info message (anything not call/cast).
@@ -282,6 +280,14 @@ impl<S: Server> Clone for ServerHandle<S> {
 fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>::State: Debug  {
     let mut state = S::init();
 
+    fn ensure_kind(expected: ResponseKind, kind: Option<ResponseKind>, ctx: &'static str) {
+        if let Some(kind) = kind {
+            if kind != expected {
+                panic!("{ctx} returned ResponseKind::{kind:?}, expected {expected:?}");
+            }
+        }
+    }
+
     loop {
         let msg = match rx.recv() {
             Ok(msg) => msg,
@@ -293,14 +299,17 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>:
                 let from_for_handler = from.clone();
                 let response = S::handle_call(msg, from_for_handler, state);
                 match response {
-                    CallResponse::Reply(reply, new_state) => {
+                    Response::Reply(reply, new_state, kind) => {
+                        ensure_kind(ResponseKind::Call, kind, "call handler");
                         let _ = from.reply(reply);
                         state = new_state;
                     }
-                    CallResponse::NoReply(new_state) => {
+                    Response::NoReply(new_state, kind) => {
+                        ensure_kind(ResponseKind::Call, kind, "call handler");
                         state = new_state;
                     }
-                    CallResponse::Stop(reason, new_state, maybe_reply) => {
+                    Response::Stop(reason, new_state, maybe_reply, kind) => {
+                        ensure_kind(ResponseKind::Call, kind, "call handler");
                         if let Some(reply) = maybe_reply {
                             let _ = from.reply(reply);
                         }
@@ -312,12 +321,20 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>:
             ServerMsg::Cast(msg) => {
                 let response = S::handle_cast(msg, state);
                 match response {
-                    CastResponse::NoReply(new_state) => {
+                    Response::NoReply(new_state, kind) => {
+                        ensure_kind(ResponseKind::Cast, kind, "cast handler");
                         state = new_state;
                     }
-                    CastResponse::Stop(reason, new_state) => {
+                    Response::Stop(reason, new_state, maybe_reply, kind) => {
+                        ensure_kind(ResponseKind::Cast, kind, "cast handler");
+                        if maybe_reply.is_some() {
+                            panic!("cast handler returned Stop with a reply; use None");
+                        }
                         S::handle_halt(reason, new_state);
                         break;
+                    }
+                    Response::Reply(_, _, _) => {
+                        panic!("cast handler returned Reply; use NoReply or Stop");
                     }
                 }
             }
@@ -379,20 +396,23 @@ mod tests {
             call: Self::Call,
             _from: CallRef<Self::Reply>,
             state: Self::State,
-        ) -> CallResponse<Self::Reply, Self::State> {
+        ) -> Response<Self::Reply, Self::State> {
             match call {
-                CallMsg::Get => CallResponse::Reply(state, state),
+                CallMsg::Get => Response::Reply(state, state, Some(ResponseKind::Call)),
                 CallMsg::Add(value) => {
                     let next = state + value;
-                    CallResponse::Reply(next, next)
+                    Response::Reply(next, next, Some(ResponseKind::Call))
                 }
             }
         }
 
-        fn handle_cast(cast: Self::Cast, state: Self::State) -> CastResponse<Self::State> {
+        fn handle_cast(
+            cast: Self::Cast,
+            state: Self::State,
+        ) -> Response<Self::Reply, Self::State> {
             match cast {
-                CastMsg::Inc => CastResponse::NoReply(state + 1),
-                CastMsg::Add(value) => CastResponse::NoReply(state + value),
+                CastMsg::Inc => Response::NoReply(state + 1, Some(ResponseKind::Cast)),
+                CastMsg::Add(value) => Response::NoReply(state + value, Some(ResponseKind::Cast)),
             }
         }
     }
@@ -433,17 +453,20 @@ mod tests {
             _call: Self::Call,
             from: CallRef<Self::Reply>,
             _state: Self::State,
-        ) -> CallResponse<Self::Reply, Self::State> {
-            CallResponse::NoReply(Some(from))
+        ) -> Response<Self::Reply, Self::State> {
+            Response::NoReply(Some(from), Some(ResponseKind::Call))
         }
 
-        fn handle_cast(cast: Self::Cast, state: Self::State) -> CastResponse<Self::State> {
+        fn handle_cast(
+            cast: Self::Cast,
+            state: Self::State,
+        ) -> Response<Self::Reply, Self::State> {
             match cast {
                 DeferredCast::ReplyNow(value) => {
                     if let Some(from) = state {
                         let _ = from.reply(value);
                     }
-                    CastResponse::NoReply(None)
+                    Response::NoReply(None, Some(ResponseKind::Cast))
                 }
             }
         }
@@ -485,5 +508,3 @@ where
     println!("{}", status.state);
     Ok(())
 }
-
-

@@ -20,7 +20,7 @@
 #[macro_export]
 macro_rules! agent {
     ($state_ty:ty) => {
-        use $crate::server::{self, CallResponse, CastResponse, Server, ServerHandle};
+        use $crate::server::{self, Response, ResponseKind, Server, ServerHandle};
         use std::fmt::Debug;
 
         pub struct Agent;
@@ -51,15 +51,18 @@ macro_rules! agent {
                 call: Self::Call,
                 _from: server::CallRef<Self::Reply>,
                 state: Self::State,
-            ) -> CallResponse<Self::Reply, Self::State> {
+            ) -> Response<Self::Reply, Self::State> {
                 match call {
-                    Call::Get => CallResponse::Reply(state.clone(), state),
+                    Call::Get => Response::Reply(state.clone(), state, Some(ResponseKind::Call)),
                 }
             }
 
-            fn handle_cast(cast: Self::Cast, _state: Self::State) -> CastResponse<Self::State> {
+            fn handle_cast(
+                cast: Self::Cast,
+                _state: Self::State,
+            ) -> Response<Self::Reply, Self::State> {
                 match cast {
-                    Cast::Update(val) => CastResponse::NoReply(val),
+                    Cast::Update(val) => Response::NoReply(val, Some(ResponseKind::Cast)),
                 }
             }
         }

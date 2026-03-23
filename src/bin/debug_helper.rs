@@ -1,4 +1,4 @@
-use ketheler::server::{self, CallRef, CallResponse, Server};
+use ketheler::server::{self, CallRef, Response, ResponseKind, Server};
 
 #[derive(Clone, Copy, Debug)]
 struct Echo(u32);
@@ -18,8 +18,8 @@ impl Server for Echo {
         _call: Self::Call,
         _from: CallRef<Self::Reply>,
         state: Self::State,
-    ) -> CallResponse<Self::Reply, Self::State> {
-        CallResponse::Reply((), state)
+    ) -> Response<Self::Reply, Self::State> {
+        Response::Reply((), state, Some(ResponseKind::Call))
     }
 }
 

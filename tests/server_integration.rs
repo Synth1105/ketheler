@@ -1,4 +1,6 @@
-use ketheler::server::{self, CallError, CallRef, CallResponse, CastResponse, Server, TerminateReason};
+use ketheler::server::{
+    self, CallError, CallRef, Response, ResponseKind, Server, TerminateReason,
+};
 
 struct Counter;
 
@@ -26,19 +28,19 @@ impl Server for Counter {
         call: Self::Call,
         _from: CallRef<Self::Reply>,
         state: Self::State,
-    ) -> CallResponse<Self::Reply, Self::State> {
+    ) -> Response<Self::Reply, Self::State> {
         match call {
-            CallMsg::Get => CallResponse::Reply(state, state),
+            CallMsg::Get => Response::Reply(state, state, Some(ResponseKind::Call)),
             CallMsg::Add(value) => {
                 let next = state + value;
-                CallResponse::Reply(next, next)
+                Response::Reply(next, next, Some(ResponseKind::Call))
             }
         }
     }
 
-    fn handle_cast(cast: Self::Cast, state: Self::State) -> CastResponse<Self::State> {
+    fn handle_cast(cast: Self::Cast, state: Self::State) -> Response<Self::Reply, Self::State> {
         match cast {
-            CastMsg::Inc => CastResponse::NoReply(state + 1),
+            CastMsg::Inc => Response::NoReply(state + 1, Some(ResponseKind::Cast)),
         }
     }
 }
