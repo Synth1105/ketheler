@@ -3,7 +3,7 @@ name = "ketheler"
 description = "Open Telecom Platform-like Library in Rust"
 version = "0.8.0"
 edition = "2024"
-license = "LGPL OR GPL"
+license = "MIT"
 
 [features]
 agent = []
