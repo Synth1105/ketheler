@@ -154,18 +154,18 @@ pub trait Server {
     }
 
     /// Handle an info message (anything not call/cast).
-    fn handle_info(info: Self::Info, state: Self::State) -> InfoResponse<Self::State> {
+    fn handle_other(info: Self::Info, state: Self::State) -> InfoResponse<Self::State> {
         let _ = info;
         InfoResponse::NoReply(state)
     }
 
     /// Called when the server stops for any reason.
-    fn terminate(reason: TerminateReason, state: Self::State) {
+    fn handle_halt(reason: TerminateReason, state: Self::State) {
         let _ = (reason, state);
     }
 
     /// Handle a status request (OTP-style).
-    fn handle_status(state: &Self::State) -> String
+    fn handle_info(state: &Self::State) -> String
     where
         <Self as Server>::State: std::fmt::Debug,
     {
@@ -235,7 +235,7 @@ impl<S: Server> ServerHandle<S> {
     }
 
     /// Send an info message.
-    pub fn info(&self, msg: S::Info) -> Result<(), SendError> {
+    pub fn other(&self, msg: S::Info) -> Result<(), SendError> {
         self.tx
             .send(ServerMsg::Info(msg))
             .map_err(|_| SendError::ServerDown)
@@ -249,7 +249,7 @@ impl<S: Server> ServerHandle<S> {
     }
 
     /// Request OTP-style status information from the server.
-    pub fn status(&self) -> Result<ServerStatus, CallError> {
+    pub fn info(&self) -> Result<ServerStatus, CallError> {
         let (tx, rx) = mpsc::channel::<String>();
         self.tx
             .send(ServerMsg::Status { reply: tx })
@@ -304,7 +304,7 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>:
                         if let Some(reply) = maybe_reply {
                             let _ = from.reply(reply);
                         }
-                        S::terminate(reason, new_state);
+                        S::handle_halt(reason, new_state);
                         break;
                     }
                 }
@@ -316,29 +316,29 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>:
                         state = new_state;
                     }
                     CastResponse::Stop(reason, new_state) => {
-                        S::terminate(reason, new_state);
+                        S::handle_halt(reason, new_state);
                         break;
                     }
                 }
             }
             ServerMsg::Info(msg) => {
-                let response = S::handle_info(msg, state);
+                let response = S::handle_other(msg, state);
                 match response {
                     InfoResponse::NoReply(new_state) => {
                         state = new_state;
                     }
                     InfoResponse::Stop(reason, new_state) => {
-                        S::terminate(reason, new_state);
+                        S::handle_halt(reason, new_state);
                         break;
                     }
                 }
             }
             ServerMsg::Status { reply } => {
-                let status = S::handle_status(&state);
+                let status = S::handle_info(&state);
                 let _ = reply.send(status);
             }
             ServerMsg::Stop(reason) => {
-                S::terminate(reason, state);
+                S::handle_halt(reason, state);
                 break;
             }
         }
@@ -481,25 +481,9 @@ pub fn debug<S>(handle: &ServerHandle<S>) -> Result<(), CallError>
 where
     S: Server,
 {
-    let status = handle.status()?;
+    let status = handle.info()?;
     println!("{}", status.state);
     Ok(())
 }
 
-/// Prints info about a server state using the server's status handler.
-pub fn debug_state<S>(state: S::State)
-where
-    S: Server,
-    S::State: Debug,
-{
-    println!("{}", <S as Server>::handle_status(&state));
-}
 
-/// Prints info about a server state without explicit turbofish by passing a server value.
-pub fn debug_state_with<S>(_: S, state: S::State)
-where
-    S: Server,
-    S::State: Debug,
-{
-    println!("{}", <S as Server>::handle_status(&state));
-}
