@@ -5,6 +5,8 @@ version = "0.6.1"
 edition = "2024"
 license = "MIT"
 
+[features]
+agent = []
 
 [dependencies]
 gag = "1.0.0"

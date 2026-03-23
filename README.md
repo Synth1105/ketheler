@@ -71,16 +71,42 @@ let value = handle.call(Call::Get).unwrap();
 assert_eq!(value, 1);
 ```
 
+## Agent Macro (feature)
+
+Ketheler ships an `agent!` macro (behind the `agent` feature) for a minimal,
+state-only server with `get` and `update` helpers.
+
+Enable the feature:
+
+```toml
+[dependencies]
+ketheler = { version = "0.6.1", features = ["agent"] }
+```
+
+Use it like this:
+
+```rust
+ketheler::agent!(u64);
+
+let handle = Agent::start_link();
+let value = Agent::get(&handle, |v| v);
+let updated = Agent::get_and_update(&handle, |v| v + 1);
+let set = Agent::update(&handle, 42);
+```
+
+The agent state type must implement:
+`Default + Clone + Debug + Send + 'static`.
+
 ## Debugging And Status (OTP-style)
 
-`ServerHandle::status()` requests OTP-style status data from a running server.
-By default, `handle_status` uses the `Debug` representation of the state.
+`ServerHandle::info()` requests OTP-style status data from a running server.
+By default, `handle_info` uses the `Debug` representation of the state.
 
 ```rust
 use ketheler::server;
 
 let handle = server::start_link::<Echo>();
-let status = handle.status().unwrap();
+let status = handle.info().unwrap();
 println!("{}", status.state);
 ```
 
