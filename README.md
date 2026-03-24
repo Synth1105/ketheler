@@ -119,14 +119,7 @@ let handle = server::start_link::<Echo>();
 server::debug(&handle).unwrap();
 ```
 
-If you want to format a state value directly (not a running server), use
-`debug_state` or `debug_state_with`:
 
-```rust
-use ketheler::server;
-
-server::debug_state::<Echo>(Echo(7));
-server::debug_state_with(Echo, Echo(7));
 ```
 
 ## Scheduler

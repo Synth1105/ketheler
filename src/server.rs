@@ -79,6 +79,7 @@ pub enum TerminateReason {
 pub enum ResponseKind {
     Call,
     Cast,
+    Other,
 }
 
 /// Unified response options for calls and casts.
@@ -88,17 +89,9 @@ pub enum Response<R, S> {
     Reply(R, S, Option<ResponseKind>),
     /// Continue without a reply.
     NoReply(S, Option<ResponseKind>),
+
     /// Stop the server, optionally replying first.
     Stop(TerminateReason, S, Option<R>, Option<ResponseKind>),
-}
-
-/// Response options for generic info messages.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InfoResponse<S> {
-    /// Continue without a reply.
-    NoReply(S),
-    /// Stop the server.
-    Stop(TerminateReason, S),
 }
 
 /// Handle used by a server to reply to a call later.
@@ -152,9 +145,9 @@ pub trait Server {
     }
 
     /// Handle an info message (anything not call/cast).
-    fn handle_other(info: Self::Info, state: Self::State) -> InfoResponse<Self::State> {
+    fn handle_other(info: Self::Info, state: Self::State) -> Response<Self::Reply, Self::State> {
         let _ = info;
-        InfoResponse::NoReply(state)
+        Response::NoReply(state, Some(ResponseKind::Other))
     }
 
     /// Called when the server stops for any reason.
@@ -308,6 +301,8 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>:
                         ensure_kind(ResponseKind::Call, kind, "call handler");
                         state = new_state;
                     }
+                
+                    
                     Response::Stop(reason, new_state, maybe_reply, kind) => {
                         ensure_kind(ResponseKind::Call, kind, "call handler");
                         if let Some(reply) = maybe_reply {
@@ -341,12 +336,16 @@ fn server_loop<S: Server>(rx: mpsc::Receiver<ServerMsg<S>>) where <S as Server>:
             ServerMsg::Info(msg) => {
                 let response = S::handle_other(msg, state);
                 match response {
-                    InfoResponse::NoReply(new_state) => {
+                    Response::NoReply(new_state, kind) => {
+                        ensure_kind(ResponseKind::Other, kind, "other handler");
                         state = new_state;
                     }
-                    InfoResponse::Stop(reason, new_state) => {
+                    Response::Stop(reason, new_state, ..) => {
                         S::handle_halt(reason, new_state);
                         break;
+                    }
+                    Response::Reply(_, _, _) => {
+                        panic!("other handler returned Reply; use NoReply or Stop");
                     }
                 }
             }
