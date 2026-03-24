@@ -1,9 +1,10 @@
 [package]
 name = "ketheler"
 description = "Open Telecom Platform-like Library in Rust"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 license = "LGPL-3.0-or-later"
+license-file = "LICENSE"
 
 [features]
 agent = []
